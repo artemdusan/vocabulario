@@ -60,24 +60,58 @@ export const generateWordData = async (polishWord, partOfSpeech, apiKey) => {
 export const generateExamples = async (wordData, apiKey) => {
   const isVerb = wordData.partOfSpeech === "verb";
 
-  const prompt = isVerb
-    ? `For Spanish verb "${wordData.translation}" (Polish: ${wordData.word}), generate example sentences for EACH conjugation form. Return JSON:
+  let prompt;
+
+  if (isVerb) {
+    prompt = `Jesteś nauczycielem języka hiszpańskiego i polskiego.
+
+Dla hiszpańskiego czasownika **${wordData.translation}** (polski: **${wordData.word}**),
+
+Wygeneruj dokładnie 18 przykładowych zdań — po jednym dla każdej formy odmiany.
+
+Zwróć **tylko** poprawny JSON w tej dokładnej strukturze — nic więcej przed ani po:
+
 {
   "forms_examples": [
-    {"tense": "present", "person": 1, "translation_form": "Polish translation of this form", "example": "Spanish sentence using yo form", "example_pl": "Polish translation"},
-    {"tense": "present", "person": 2, "translation_form": "...", "example": "...", "example_pl": "..."},
-    ... (all 18 forms: present 1-6, past 1-6, future 1-6)
+    {
+      "tense": "present",
+      "person": 1,
+      "form": "como",
+      "translation_form": "jem",
+      "example": "Yo como una manzana todos los días.",
+      "example_pl": " Jem jabłko codziennie."
+    },
+    {
+      "tense": "present",
+      "person": 2,
+      "form": "comes",
+      "translation_form": "jesz",
+      "example": "Tú comes pizza con amigos.",
+      "example_pl": " Jesz pizzę z przyjaciółmi."
+    },
+    // ... i tak dalej dla wszystkich 18 form (present 1–6, pretérito indefinido 1–6, futuro simple 1–6)
+    // person: 1 = ja, 2 = ty, 3 = on/ona/Pan/Pani, 4 = my, 5 = wy, 6 = oni/one/Państwo
   ]
-}`
-    : `For Spanish ${wordData.partOfSpeech} "${wordData.article ? wordData.article + " " : ""}${wordData.translation}" (Polish: ${wordData.word}), generate one example sentence. Return JSON:
+}
+
+Zasady:
+- "translation_form" → zawsze krótka forma w **polskim** (w 1. os. lp., bez "ja/ty" na początku, np. "jem", "jesz", "je", "jemy", "jecie", "jedzą")
+- "example" → naturalne zdanie po **hiszpańsku** z użyciem dokładnie tej formy czasownika
+- "example_pl" → dokładne, naturalne tłumaczenie tego zdania na **polski**
+- Używaj realistycznych, codziennych zdań
+- Nie dodawaj wyjaśnień, nie używaj markdownu, tylko czysty JSON`;
+  } else {
+    // prompt dla rzeczowników/przymiotników — też po polsku
+    prompt = `Dla hiszpańskiego ${wordData.partOfSpeech} "${wordData.article ? wordData.article + " " : ""}${wordData.translation}" (polski: ${wordData.word}), wygeneruj jedno dobre, naturalne przykładowe zdanie. Zwróć JSON:
 {
-  "example": "Spanish sentence using the word",
-  "example_pl": "Polish translation"
+  "example": "Zdanie po hiszpańsku z użyciem słowa",
+  "example_pl": "Naturalne tłumaczenie na polski"
 }`;
+  }
 
   return callOpenAI(
     [{ role: "user", content: prompt }],
     apiKey,
-    isVerb ? 2000 : 200,
+    isVerb ? 1200 : 300,
   );
 };
