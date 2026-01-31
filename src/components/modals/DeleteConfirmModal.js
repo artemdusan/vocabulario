@@ -4,6 +4,8 @@ import { Modal, Button } from '../ui';
 const DeleteConfirmModal = ({ word, onClose, onConfirm }) => {
   if (!word) return null;
 
+  const isVerb = word.type === 'verb';
+
   return (
     <Modal
       open={!!word}
@@ -19,6 +21,11 @@ const DeleteConfirmModal = ({ word, onClose, onConfirm }) => {
       }
     >
       <p>Czy na pewno chcesz usunąć słowo <strong>"{word.word}"</strong>?</p>
+      {isVerb && (
+        <p className="delete-info">
+          ⚠️ Usunięcie czasownika spowoduje również usunięcie wszystkich jego form odmiany.
+        </p>
+      )}
       <p className="delete-warning">Ta operacja jest nieodwracalna.</p>
     </Modal>
   );

@@ -23,7 +23,6 @@ const LearningView = () => {
   const [selectedOption, setSelectedOption] = useState(null);
 
   // Session state: track streak and intro shown per item
-  // Map<itemId, { streak: number, shownIntro: boolean }>
   const [sessionState, setSessionState] = useState(new Map());
 
   const sessionInitialized = useRef(false);
@@ -33,19 +32,23 @@ const LearningView = () => {
     wordsRef.current = words;
   }, [words]);
 
-  // Generate verb options
+  // Generate verb options for verbForm items
   const generateVerbOptions = useCallback((item) => {
-    if (!item || item.type !== "verbform") return [];
+    if (!item || item.type !== "verbForm") return [];
 
-    const word = wordsRef.current.find((w) => w.id === item.verbId);
-    if (!word?.forms) return [];
+    // Get all verb forms for this verb
+    const allForms = wordsRef.current.filter(
+      w => w.type === 'verbForm' && w.verbId === item.verbId
+    );
 
     const correctForm = item.form;
-    const otherForms = word.forms
-      .filter((f) => f.form !== correctForm)
-      .map((f) => f.form);
+    const otherForms = allForms
+      .filter(f => f.form !== correctForm)
+      .map(f => f.form);
 
-    const shuffled = [...otherForms].sort(() => Math.random() - 0.5);
+    // Get unique forms
+    const uniqueOtherForms = [...new Set(otherForms)];
+    const shuffled = uniqueOtherForms.sort(() => Math.random() - 0.5);
     const wrongOptions = shuffled.slice(0, 2);
 
     return [correctForm, ...wrongOptions].sort(() => Math.random() - 0.5);
@@ -56,9 +59,9 @@ const LearningView = () => {
     if (!item?.example) return { sentence: "", blank: "" };
 
     let target = "";
-    if (item.type === "verbform") {
+    if (item.type === "verbForm") {
       target = item.form;
-    } else if (item.partOfSpeech === "noun" && item.article) {
+    } else if (item.type === "noun" && item.article) {
       target = `${item.article} ${item.translation}`;
     } else {
       target = item.translation;
@@ -93,10 +96,10 @@ const LearningView = () => {
     });
   }, [session, sessionState, settings.requiredStreak]);
 
-  // Prepare for showing a question (set options for verbs)
+  // Prepare for showing a question
   const prepareQuestion = useCallback(
     (item) => {
-      if (item?.type === "verbform") {
+      if (item?.type === "verbForm") {
         const newOptions = generateVerbOptions(item);
         setOptions(newOptions);
       } else {
@@ -109,7 +112,7 @@ const LearningView = () => {
     [generateVerbOptions]
   );
 
-  // Initialize session ONLY ONCE
+  // Initialize session
   useEffect(() => {
     if (sessionInitialized.current) return;
     sessionInitialized.current = true;
@@ -129,14 +132,11 @@ const LearningView = () => {
       setPhase("complete");
     } else {
       const firstItem = items[0];
-      // Check if first item needs intro
       if (firstItem.level === 0) {
         setPhase("intro");
       } else {
         setPhase("question");
-        // Set options for first item if it's a verb
-        if (firstItem.type === "verbform") {
-          // We need to delay this slightly since wordsRef might not be ready
+        if (firstItem.type === "verbForm") {
           setTimeout(() => {
             const opts = generateVerbOptions(firstItem);
             setOptions(opts);
@@ -154,10 +154,7 @@ const LearningView = () => {
       const itemId = getItemId(currentItem);
       setSessionState((prev) => {
         const newState = new Map(prev);
-        const current = newState.get(itemId) || {
-          streak: 0,
-          shownIntro: false,
-        };
+        const current = newState.get(itemId) || { streak: 0, shownIntro: false };
         newState.set(itemId, { ...current, shownIntro: true });
         return newState;
       });
@@ -170,7 +167,7 @@ const LearningView = () => {
   const handleSubmitAnswer = async () => {
     const question = createQuestion(currentItem);
     const correct =
-      currentItem.type === "verbform"
+      currentItem.type === "verbForm"
         ? selectedOption === currentItem.form
         : validateAnswer(answer, question.blank, currentItem);
 
@@ -201,59 +198,33 @@ const LearningView = () => {
 
   const updateProgress = async (item, correct, newSessionStreak) => {
     const currentWords = wordsRef.current;
+    const word = currentWords.find(w => w.id === item.id);
+    
+    if (!word) return;
 
-    if (item.type === "verbform") {
-      const word = currentWords.find((w) => w.id === item.verbId);
-      if (!word) return;
+    const { level, lastLevelChange } = calculateNewLevel(
+      word.level || 0,
+      correct,
+      newSessionStreak,
+      word.lastLevelChange,
+      settings.requiredStreak
+    );
 
-      const updatedForms = word.forms.map((f) => {
-        if (f.tense === item.tense && f.person === item.person) {
-          const { level, lastLevelChange } = calculateNewLevel(
-            f.level || 0,
-            correct,
-            newSessionStreak,
-            f.lastLevelChange,
-            settings.requiredStreak
-          );
-          return { ...f, level, lastLevelChange };
-        }
-        return f;
-      });
-
-      await db.words.put({ ...word, forms: updatedForms });
-    } else {
-      const word = currentWords.find((w) => w.id === item.id);
-      if (!word) return;
-
-      const { level, lastLevelChange } = calculateNewLevel(
-        word.level || 0,
-        correct,
-        newSessionStreak,
-        word.lastLevelChange,
-        settings.requiredStreak
-      );
-
-      await db.words.put({ ...word, level, lastLevelChange });
-    }
-
+    await db.words.put({ ...word, level, lastLevelChange });
     await refreshWords();
   };
 
   const handleNext = () => {
-    // Get incomplete items (streak < required)
     const incompleteItems = getIncompleteItems();
 
     if (incompleteItems.length === 0) {
-      // All items completed!
       setPhase("complete");
       return;
     }
 
-    // Find next incomplete item (cycle through)
     let nextItem = null;
     let nextIndex = currentIndex;
 
-    // Try to find next incomplete item after current index
     for (let i = 1; i <= session.length; i++) {
       const checkIndex = (currentIndex + i) % session.length;
       const item = session[checkIndex];
@@ -274,7 +245,6 @@ const LearningView = () => {
 
     setCurrentIndex(nextIndex);
 
-    // Check if needs intro (level 0 and not shown yet)
     if (needsIntro(nextItem)) {
       setPhase("intro");
     } else {
@@ -290,18 +260,15 @@ const LearningView = () => {
     return (state?.streak || 0) >= settings.requiredStreak;
   }).length;
 
-  const progress =
-    session.length > 0 ? (completedCount / session.length) * 100 : 0;
+  const progress = session.length > 0 ? (completedCount / session.length) * 100 : 0;
 
-  // Render intro card (only for level 0, not shown before)
+  // Render intro card
   const renderIntro = () => {
     if (!currentItem) return null;
 
-    const isVerbForm = currentItem.type === "verbform";
+    const isVerbForm = currentItem.type === "verbForm";
     const displayWord = isVerbForm
-      ? `${currentItem.word} (${TENSE_LABELS[currentItem.tense]}, ${
-          PERSONS[currentItem.person - 1]
-        })`
+      ? `${currentItem.word} (${TENSE_LABELS[currentItem.tense]}, ${PERSONS[currentItem.person - 1]})`
       : currentItem.word;
     const displayTranslation = isVerbForm
       ? currentItem.form
@@ -331,7 +298,7 @@ const LearningView = () => {
     if (!currentItem) return null;
 
     const question = createQuestion(currentItem);
-    const isVerbForm = currentItem.type === "verbform";
+    const isVerbForm = currentItem.type === "verbForm";
     const itemId = getItemId(currentItem);
     const state = sessionState.get(itemId);
     const currentStreak = state?.streak || 0;
@@ -346,8 +313,7 @@ const LearningView = () => {
           </Badge>
           {isVerbForm && (
             <Badge variant="accent">
-              {TENSE_LABELS[currentItem.tense]} •{" "}
-              {PERSONS[currentItem.person - 1]}
+              {TENSE_LABELS[currentItem.tense]} • {PERSONS[currentItem.person - 1]}
             </Badge>
           )}
         </div>
@@ -405,9 +371,7 @@ const LearningView = () => {
 
     return (
       <Card
-        className={`learning-card feedback-card ${
-          isCorrect ? "correct" : "incorrect"
-        }`}
+        className={`learning-card feedback-card ${isCorrect ? "correct" : "incorrect"}`}
       >
         <div className="feedback-icon">{isCorrect ? "✅" : "❌"}</div>
         <div className="feedback-message">
@@ -422,8 +386,7 @@ const LearningView = () => {
         </div>
         {isCorrect && !isComplete && (
           <p className="feedback-hint">
-            Jeszcze {settings.requiredStreak - currentStreak} poprawna odpowiedź
-            do zaliczenia.
+            Jeszcze {settings.requiredStreak - currentStreak} poprawna odpowiedź do zaliczenia.
           </p>
         )}
         {!isCorrect && (
@@ -446,7 +409,6 @@ const LearningView = () => {
     </Card>
   );
 
-  // Count remaining
   const remainingCount = session.length - completedCount;
 
   return (
@@ -460,9 +422,7 @@ const LearningView = () => {
             {completedCount} / {session.length} zaliczonych
           </span>
           {remainingCount > 0 && (
-            <span className="remaining-count">
-              ({remainingCount} pozostało)
-            </span>
+            <span className="remaining-count">({remainingCount} pozostało)</span>
           )}
         </div>
       </header>

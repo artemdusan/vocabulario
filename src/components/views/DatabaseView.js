@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { db } from "../../services/db";
 import { generateWordData, generateExamples } from "../../services/api";
@@ -10,12 +10,12 @@ import {
   ViewWordModal,
   EditWordModal,
   DeleteConfirmModal,
+  DataManagementModal,
 } from "../modals";
 import ImportProgress from "../ImportProgress";
-import { POS_LABELS } from "../../constants";
-import { getDisplayTranslation, delay } from "../../utils";
+import { TYPE_LABELS, TENSE_LABELS, PERSONS } from "../../constants";
+import { getDisplayTranslation, delay, groupWordsWithForms, countInLearningByType } from "../../utils";
 import { autoReplenishLearning } from "../../services/autoReplenish";
-import { countInLearningByType } from "../../utils";
 
 const DatabaseView = () => {
   const { words, refreshWords, setView, settings, saveSettings } = useApp();
@@ -25,27 +25,45 @@ const DatabaseView = () => {
   const [toast, setToast] = useState(null);
   const [adding, setAdding] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
+  const [expandedVerbs, setExpandedVerbs] = useState(new Set());
 
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDataModal, setShowDataModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(null);
   const [showEditModal, setShowEditModal] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
+  // Group words with forms
+  const { verbsWithForms, others } = useMemo(() => groupWordsWithForms(words), [words]);
+
   // Filtered and sorted words
-  const filteredWords = useMemo(
-    () =>
-      words
-        .filter(
-          (w) =>
-            w.word?.toLowerCase().includes(search.toLowerCase()) ||
-            w.translation?.toLowerCase().includes(search.toLowerCase())
-        )
-        .sort((a, b) => (a.level || 0) - (b.level || 0)),
-    [words, search]
-  );
+  const filteredItems = useMemo(() => {
+    const searchLower = search.toLowerCase();
+    
+    // Filter verbs with forms
+    const filteredVerbs = verbsWithForms.filter(v => 
+      v.word?.toLowerCase().includes(searchLower) ||
+      v.translation?.toLowerCase().includes(searchLower) ||
+      v.forms.some(f => f.form?.toLowerCase().includes(searchLower))
+    );
+    
+    // Filter other words
+    const filteredOthers = others.filter(w =>
+      w.word?.toLowerCase().includes(searchLower) ||
+      w.translation?.toLowerCase().includes(searchLower)
+    );
+    
+    // Combine and sort
+    const all = [
+      ...filteredVerbs.map(v => ({ ...v, _isVerb: true })),
+      ...filteredOthers.map(w => ({ ...w, _isVerb: false })),
+    ].sort((a, b) => (a.level || 0) - (b.level || 0));
+    
+    return all;
+  }, [verbsWithForms, others, search]);
 
   // Auto-replenish on view load
   useEffect(() => {
@@ -57,28 +75,33 @@ const DatabaseView = () => {
 
   // Statistics
   const stats = useMemo(() => {
-    let total = 0,
-      inLearning = 0;
+    let total = 0, inLearning = 0;
     const levels = [0, 0, 0, 0, 0, 0];
 
-    words.forEach((w) => {
-      if (w.partOfSpeech === "verb" && w.forms) {
-        w.forms.forEach((f) => {
-          total++;
-          if (f.in_learning) inLearning++;
-          levels[f.level || 0]++;
-        });
-      } else {
-        total++;
-        if (w.in_learning) inLearning++;
-        levels[w.level || 0]++;
-      }
+    words.forEach(w => {
+      total++;
+      if (w.in_learning) inLearning++;
+      levels[Math.min(w.level || 0, 5)]++;
     });
 
     return { total, inLearning, levels };
   }, [words]);
 
   const canStartLearning = stats.inLearning > 0;
+
+  // Toggle verb expansion
+  const toggleVerbExpand = (verbId, e) => {
+    e.stopPropagation();
+    setExpandedVerbs(prev => {
+      const next = new Set(prev);
+      if (next.has(verbId)) {
+        next.delete(verbId);
+      } else {
+        next.add(verbId);
+      }
+      return next;
+    });
+  };
 
   // Handlers
   const handleAddWord = async (data) => {
@@ -96,23 +119,39 @@ const DatabaseView = () => {
       );
       const examples = await generateExamples(wordData, settings.apiKey);
 
-      let forms = null;
-      if (
-        wordData.partOfSpeech === "verb" &&
-        wordData.forms &&
-        examples.forms_examples
-      ) {
-        forms = [];
+      if (wordData.type === "verb" && wordData.forms && examples.forms_examples) {
+        // Create verb entry (infinitive)
+        const verbId = db.generateId();
+        await db.words.add({
+          id: verbId,
+          word: wordData.word,
+          translation: wordData.translation,
+          type: "verb",
+          example: examples.forms_examples[0]?.example || "",
+          example_pl: examples.forms_examples[0]?.example_pl || "",
+          level: 0,
+          streak: 0,
+          in_learning: false,
+        });
+
+        // Create verb form entries
         for (const tense of ["present", "past", "future"]) {
-          wordData.forms[tense]?.forEach((form, idx) => {
+          const tenseForms = wordData.forms[tense] || [];
+          tenseForms.forEach((formText, idx) => {
             const ex = examples.forms_examples.find(
-              (e) => e.tense === tense && e.person === idx + 1
+              e => e.tense === tense && e.person === idx + 1
             );
-            forms.push({
+            
+            db.words.add({
+              id: db.generateId(),
+              verbId,
+              word: wordData.word,
+              translation: wordData.translation,
+              type: "verbForm",
               tense,
               person: idx + 1,
-              form,
-              translation_form: ex?.translation_form || "",
+              form: formText,
+              form_pl: ex?.form_pl || "",
               example: ex?.example || "",
               example_pl: ex?.example_pl || "",
               level: 0,
@@ -121,20 +160,21 @@ const DatabaseView = () => {
             });
           });
         }
+      } else {
+        // Non-verb word
+        await db.words.add({
+          id: db.generateId(),
+          word: wordData.word,
+          translation: wordData.translation,
+          type: wordData.type,
+          article: wordData.article || null,
+          example: examples.example || "",
+          example_pl: examples.example_pl || "",
+          level: 0,
+          streak: 0,
+          in_learning: false,
+        });
       }
-
-      await db.words.add({
-        word: wordData.word,
-        translation: wordData.translation,
-        partOfSpeech: wordData.partOfSpeech,
-        article: wordData.article || null,
-        example: examples.example || "",
-        example_pl: examples.example_pl || "",
-        forms,
-        level: 0,
-        streak: 0,
-        in_learning: false,
-      });
 
       await refreshWords();
       setShowAddModal(false);
@@ -153,10 +193,10 @@ const DatabaseView = () => {
     }
 
     const existingWords = new Set(
-      words.map((w) => `${w.word}-${w.partOfSpeech}`)
+      words.filter(w => w.type !== 'verbForm').map(w => `${w.word}-${w.type}`)
     );
     const newRows = csvRows.filter(
-      (r) => !existingWords.has(`${r.word}-${r.partOfSpeech}`)
+      r => !existingWords.has(`${r.word}-${r.partOfSpeech}`)
     );
 
     if (newRows.length === 0) {
@@ -181,23 +221,37 @@ const DatabaseView = () => {
         );
         const examples = await generateExamples(wordData, settings.apiKey);
 
-        let forms = null;
-        if (
-          wordData.partOfSpeech === "verb" &&
-          wordData.forms &&
-          examples.forms_examples
-        ) {
-          forms = [];
+        if (wordData.type === "verb" && wordData.forms && examples.forms_examples) {
+          const verbId = db.generateId();
+          await db.words.add({
+            id: verbId,
+            word: wordData.word,
+            translation: wordData.translation,
+            type: "verb",
+            example: examples.forms_examples[0]?.example || "",
+            example_pl: examples.forms_examples[0]?.example_pl || "",
+            level: 0,
+            streak: 0,
+            in_learning: false,
+          });
+
           for (const tense of ["present", "past", "future"]) {
-            wordData.forms[tense]?.forEach((form, idx) => {
+            const tenseForms = wordData.forms[tense] || [];
+            tenseForms.forEach((formText, idx) => {
               const ex = examples.forms_examples.find(
-                (e) => e.tense === tense && e.person === idx + 1
+                e => e.tense === tense && e.person === idx + 1
               );
-              forms.push({
+              
+              db.words.add({
+                id: db.generateId(),
+                verbId,
+                word: wordData.word,
+                translation: wordData.translation,
+                type: "verbForm",
                 tense,
                 person: idx + 1,
-                form,
-                translation_form: ex?.translation_form || "",
+                form: formText,
+                form_pl: ex?.form_pl || "",
                 example: ex?.example || "",
                 example_pl: ex?.example_pl || "",
                 level: 0,
@@ -206,20 +260,20 @@ const DatabaseView = () => {
               });
             });
           }
+        } else {
+          await db.words.add({
+            id: db.generateId(),
+            word: wordData.word,
+            translation: wordData.translation,
+            type: wordData.type,
+            article: wordData.article || null,
+            example: examples.example || "",
+            example_pl: examples.example_pl || "",
+            level: 0,
+            streak: 0,
+            in_learning: false,
+          });
         }
-
-        await db.words.add({
-          word: wordData.word,
-          translation: wordData.translation,
-          partOfSpeech: wordData.partOfSpeech,
-          article: wordData.article || null,
-          example: examples.example || "",
-          example_pl: examples.example_pl || "",
-          forms,
-          level: 0,
-          streak: 0,
-          in_learning: false,
-        });
 
         return { success: true, word: row.word };
       } catch (err) {
@@ -229,7 +283,7 @@ const DatabaseView = () => {
 
     for (let i = 0; i < newRows.length; i += BATCH_SIZE) {
       const batch = newRows.slice(i, i + BATCH_SIZE);
-      const batchWords = batch.map((r) => r.word).join(", ");
+      const batchWords = batch.map(r => r.word).join(", ");
 
       setImportProgress({
         current: Math.min(i + BATCH_SIZE, newRows.length),
@@ -240,7 +294,7 @@ const DatabaseView = () => {
 
       const results = await Promise.all(batch.map(processWord));
 
-      results.forEach((r) => {
+      results.forEach(r => {
         if (!r.success) {
           errors.push({ word: r.word, error: r.error });
         }
@@ -276,12 +330,83 @@ const DatabaseView = () => {
   };
 
   const handleDeleteWord = async (word) => {
-    await db.words.delete(word.id);
+    if (word.type === "verb") {
+      // Delete verb and all its forms
+      await db.words.deleteVerbWithForms(word.id);
+    } else {
+      await db.words.delete(word.id);
+    }
     await refreshWords();
     setDeleteConfirm(null);
     setShowEditModal(null);
     setToast({ message: "Słowo usunięte", type: "success" });
   };
+
+  // Data management handlers
+  const handleExportJSON = async () => {
+    try {
+      const data = await db.export();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vocabulario-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToast({ message: "Eksport zakończony!", type: "success" });
+    } catch (err) {
+      setToast({ message: `Błąd eksportu: ${err.message}`, type: "error" });
+    }
+  };
+
+  const handleImportJSON = async (file, clearExisting) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const result = await db.import(data, { clearExisting });
+      await refreshWords();
+      setShowDataModal(false);
+      setToast({ 
+        message: `Zaimportowano ${result.imported} wpisów${result.skipped > 0 ? `, pominięto ${result.skipped}` : ''}`, 
+        type: "success" 
+      });
+    } catch (err) {
+      setToast({ message: `Błąd importu: ${err.message}`, type: "error" });
+    }
+  };
+
+  const handleClearDatabase = async () => {
+    try {
+      await db.words.clear();
+      await refreshWords();
+      setShowDataModal(false);
+      setToast({ message: "Baza danych wyczyszczona", type: "success" });
+    } catch (err) {
+      setToast({ message: `Błąd: ${err.message}`, type: "error" });
+    }
+  };
+
+  // Render verb form row
+  const renderVerbFormRow = (form) => (
+    <div 
+      key={form.id} 
+      className={`verb-form-row ${form.in_learning ? 'in-learning' : ''}`}
+      onClick={() => setShowViewModal(form)}
+    >
+      <div className="form-info">
+        <span className="form-person">{PERSONS[form.person - 1]}</span>
+        <span className="form-tense">{TENSE_LABELS[form.tense]}</span>
+        <span className="form-text">{form.form}</span>
+        <span className="form-pl">{form.form_pl}</span>
+      </div>
+      <div className="form-meta">
+        <Badge variant={form.level >= 4 ? "success" : "default"}>
+          Lv.{form.level || 0}
+        </Badge>
+        {form.in_learning && <Badge variant="accent">W nauce</Badge>}
+      </div>
+    </div>
+  );
 
   return (
     <div className="database-view">
@@ -306,6 +431,9 @@ const DatabaseView = () => {
         >
           📥 Import CSV
         </Button>
+        <Button variant="secondary" onClick={() => setShowDataModal(true)}>
+          💾 Baza danych
+        </Button>
         <Button variant="secondary" onClick={() => setShowSettingsModal(true)}>
           ⚙️ Ustawienia
         </Button>
@@ -324,7 +452,7 @@ const DatabaseView = () => {
       {/* Stats */}
       <div className="stats-bar">
         <div className="stat">
-          <span className="stat-value">{words.length}</span>
+          <span className="stat-value">{words.filter(w => w.type !== 'verbForm').length}</span>
           <span className="stat-label">Słów</span>
         </div>
         <div className="stat">
@@ -332,8 +460,8 @@ const DatabaseView = () => {
           <span className="stat-label">W nauce</span>
         </div>
         <div className="stat stat-type">
-          <span className="stat-value">{inLearningByType.verb || 0}</span>
-          <span className="stat-label">🔄 Czasowniki</span>
+          <span className="stat-value">{inLearningByType.verbForm || 0}</span>
+          <span className="stat-label">🔄 Formy czasowników</span>
         </div>
         <div className="stat stat-type">
           <span className="stat-value">{inLearningByType.adjective || 0}</span>
@@ -350,13 +478,13 @@ const DatabaseView = () => {
         <Input
           placeholder="🔍 Szukaj słów..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
         />
       </div>
 
       {/* Word List */}
       <div className="word-list">
-        {filteredWords.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <div className="empty-state">
             <p>
               Brak słów{search ? " pasujących do wyszukiwania" : " w bazie"}
@@ -364,25 +492,56 @@ const DatabaseView = () => {
             {!search && <p>Dodaj pierwsze słowo, aby rozpocząć!</p>}
           </div>
         ) : (
-          filteredWords.map((word) => (
-            <div
-              key={word.id}
-              className={`word-card ${word.in_learning ? "in-learning" : ""}`}
-              onClick={() => setShowViewModal(word)}
-            >
-              <div className="word-main">
-                <span className="word-polish">{word.word}</span>
-                <span className="word-spanish">
-                  {getDisplayTranslation(word)}
-                </span>
+          filteredItems.map(item => (
+            <div key={item.id} className="word-entry">
+              <div
+                className={`word-card ${item.in_learning ? "in-learning" : ""} ${item._isVerb ? "is-verb" : ""}`}
+                onClick={() => setShowViewModal(item)}
+              >
+                <div className="word-main">
+                  <span className="word-polish">{item.word}</span>
+                  <span className="word-spanish">
+                    {getDisplayTranslation(item)}
+                  </span>
+                </div>
+                <div className="word-meta">
+                  <Badge>{TYPE_LABELS[item.type]}</Badge>
+                  {item.type !== 'verb' && (
+                    <Badge variant={item.level >= 4 ? "success" : "default"}>
+                      Lv.{item.level || 0}
+                    </Badge>
+                  )}
+                  {item.in_learning && <Badge variant="accent">W nauce</Badge>}
+                  {item._isVerb && item.forms?.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => toggleVerbExpand(item.id, e)}
+                      className="expand-btn"
+                    >
+                      {expandedVerbs.has(item.id) ? "▼" : "▶"} {item.forms.length} form
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="word-meta">
-                <Badge>{POS_LABELS[word.partOfSpeech]}</Badge>
-                <Badge variant={word.level >= 4 ? "success" : "default"}>
-                  Lv.{word.level || 0}
-                </Badge>
-                {word.in_learning && <Badge variant="accent">W nauce</Badge>}
-              </div>
+              
+              {/* Expanded verb forms */}
+              {item._isVerb && expandedVerbs.has(item.id) && item.forms && (
+                <div className="verb-forms-list">
+                  {['present', 'past', 'future'].map(tense => {
+                    const tenseForms = item.forms.filter(f => f.tense === tense);
+                    if (tenseForms.length === 0) return null;
+                    return (
+                      <div key={tense} className="tense-group">
+                        <div className="tense-label">{TENSE_LABELS[tense]}</div>
+                        {tenseForms
+                          .sort((a, b) => a.person - b.person)
+                          .map(form => renderVerbFormRow(form))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))
         )}
@@ -407,13 +566,23 @@ const DatabaseView = () => {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImport={handleImportCSV}
-        existingWords={words}
+        existingWords={words.filter(w => w.type !== 'verbForm')}
+      />
+
+      <DataManagementModal
+        open={showDataModal}
+        onClose={() => setShowDataModal(false)}
+        onExport={handleExportJSON}
+        onImport={handleImportJSON}
+        onClear={handleClearDatabase}
+        wordCount={words.length}
       />
 
       <ViewWordModal
         word={showViewModal}
+        allWords={words}
         onClose={() => setShowViewModal(null)}
-        onEdit={(w) => {
+        onEdit={w => {
           setShowViewModal(null);
           setShowEditModal(w);
         }}
@@ -421,9 +590,10 @@ const DatabaseView = () => {
 
       <EditWordModal
         word={showEditModal}
+        allWords={words}
         onClose={() => setShowEditModal(null)}
         onSave={handleSaveWord}
-        onDelete={(w) => {
+        onDelete={w => {
           setShowEditModal(null);
           setDeleteConfirm(w);
         }}

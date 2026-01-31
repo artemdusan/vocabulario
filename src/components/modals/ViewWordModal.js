@@ -1,10 +1,21 @@
 import React from 'react';
 import { Modal, Button, Badge } from '../ui';
-import { POS_LABELS, TENSE_LABELS, PERSONS } from '../../constants';
-import { getDisplayTranslation } from '../../utils';
+import { TYPE_LABELS, TENSE_LABELS, PERSONS } from '../../constants';
+import { getDisplayTranslation, getVerbForms } from '../../utils';
 
-const ViewWordModal = ({ word, onClose, onEdit }) => {
+const ViewWordModal = ({ word, allWords, onClose, onEdit }) => {
   if (!word) return null;
+
+  const isVerbForm = word.type === 'verbForm';
+  const isVerb = word.type === 'verb';
+  
+  // Get verb forms if this is a verb
+  const verbForms = isVerb ? getVerbForms(allWords, word.id) : [];
+  
+  // Get parent verb if this is a verb form
+  const parentVerb = isVerbForm 
+    ? allWords.find(w => w.id === word.verbId) 
+    : null;
 
   return (
     <Modal
@@ -24,13 +35,37 @@ const ViewWordModal = ({ word, onClose, onEdit }) => {
           <span className="value">{getDisplayTranslation(word)}</span>
         </div>
         <div className="word-info-row">
-          <span className="label">Część mowy:</span>
-          <Badge>{POS_LABELS[word.partOfSpeech]}</Badge>
+          <span className="label">Typ:</span>
+          <Badge>{TYPE_LABELS[word.type]}</Badge>
         </div>
+        
+        {isVerbForm && (
+          <>
+            <div className="word-info-row">
+              <span className="label">Czas:</span>
+              <span className="value">{TENSE_LABELS[word.tense]}</span>
+            </div>
+            <div className="word-info-row">
+              <span className="label">Osoba:</span>
+              <span className="value">{PERSONS[word.person - 1]}</span>
+            </div>
+            <div className="word-info-row">
+              <span className="label">Forma (PL):</span>
+              <span className="value">{word.form_pl}</span>
+            </div>
+            {parentVerb && (
+              <div className="word-info-row">
+                <span className="label">Bezokolicznik:</span>
+                <span className="value">{parentVerb.translation}</span>
+              </div>
+            )}
+          </>
+        )}
+        
         <div className="word-info-row">
           <span className="label">Poziom:</span>
           <Badge variant={word.level >= 4 ? 'success' : 'default'}>
-            {word.level || 0}/5
+            {word.level || 0}
           </Badge>
         </div>
         
@@ -41,7 +76,7 @@ const ViewWordModal = ({ word, onClose, onEdit }) => {
           </div>
         )}
 
-        {word.partOfSpeech === 'verb' && word.forms && (
+        {isVerb && verbForms.length > 0 && (
           <div className="verb-forms-table">
             <h4>Odmiana</h4>
             <table>
@@ -58,7 +93,9 @@ const ViewWordModal = ({ word, onClose, onEdit }) => {
                   <tr key={person}>
                     <td className="person">{person}</td>
                     {['present', 'past', 'future'].map(tense => {
-                      const form = word.forms.find(f => f.tense === tense && f.person === idx + 1);
+                      const form = verbForms.find(
+                        f => f.tense === tense && f.person === idx + 1
+                      );
                       return (
                         <td key={tense} className={form?.in_learning ? 'in-learning' : ''}>
                           {form?.form}

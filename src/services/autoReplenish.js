@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { countInLearningByType, getAvailableByType } from "../utils";
+import { countInLearningByType, getAvailableByType, getVerbForms } from "../utils";
 
 /**
  * Auto-replenish learning pool when a type runs out
@@ -10,28 +10,31 @@ export const autoReplenishLearning = async (words, settings, refreshWords) => {
 
   let updated = false;
 
-  // Replenish verbs
-  if (counts.verb === 0 && autoAddVerbs > 0) {
-    const available = getAvailableByType(words, "verb");
-    const toAdd = available.slice(0, autoAddVerbs);
+  // Replenish verbs (add verb and all its forms to learning)
+  if (counts.verbForm === 0 && autoAddVerbs > 0) {
+    const availableVerbs = getAvailableByType(words, "verb");
+    const toAdd = availableVerbs.slice(0, autoAddVerbs);
 
     for (const verb of toAdd) {
-      // Add verb and all its forms to learning
-      const updatedForms =
-        verb.forms?.map((f) => ({
-          ...f,
-          in_learning: true,
-          level: 0,
-          lastLevelChange: null,
-        })) || [];
-
+      // Update the verb itself
       await db.words.put({
         ...verb,
         in_learning: true,
         level: 0,
         lastLevelChange: null,
-        forms: updatedForms,
       });
+
+      // Update all verb forms
+      const forms = getVerbForms(words, verb.id);
+      for (const form of forms) {
+        await db.words.put({
+          ...form,
+          in_learning: true,
+          level: 0,
+          lastLevelChange: null,
+        });
+      }
+      
       updated = true;
     }
   }

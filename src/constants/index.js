@@ -1,17 +1,27 @@
 export const DB_NAME = "vocabulary-db";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3; // Bumped for schema change
 export const STORE_WORDS = "words";
 export const STORE_SETTINGS = "settings";
 
 export const POOL_SIZE = 20;
 export const MAX_LEVEL = 100;
-export const REQUIRED_STREAK = 2; // Correct answers in a row to complete item
+export const REQUIRED_STREAK = 2;
 
-// Auto-replenish defaults
 export const AUTO_ADD_VERBS = 1;
 export const AUTO_ADD_ADJECTIVES = 2;
 export const AUTO_ADD_NOUNS = 4;
 
+// New type system
+export const WORD_TYPES = ["noun", "verb", "verbForm", "adjective"];
+
+export const TYPE_LABELS = {
+  noun: "Rzeczownik",
+  verb: "Czasownik",
+  verbForm: "Forma czasownika",
+  adjective: "Przymiotnik",
+};
+
+// For API/import compatibility
 export const PARTS_OF_SPEECH = ["noun", "verb", "adjective"];
 
 export const POS_LABELS = {
@@ -46,5 +56,4 @@ export const ARTICLE_ALTERNATIVES = {
   unas: "las",
 };
 
-// 24 hours in milliseconds
 export const LEVEL_CHANGE_COOLDOWN = 24 * 60 * 60 * 1000;

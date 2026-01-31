@@ -19,8 +19,8 @@ const ImportCSVModal = ({ open, onClose, onImport, existingWords }) => {
       const rows = parseCSV(text);
       setCsvData(rows);
 
-      // Calculate preview stats
-      const existingSet = new Set(existingWords.map(w => `${w.word}-${w.partOfSpeech}`));
+      // Calculate preview stats - use type instead of partOfSpeech for comparison
+      const existingSet = new Set(existingWords.map(w => `${w.word}-${w.type}`));
       const newCount = rows.filter(r => !existingSet.has(`${r.word}-${r.partOfSpeech}`)).length;
       setPreviewCount({
         total: rows.length,

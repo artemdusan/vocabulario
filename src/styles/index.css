@@ -517,6 +517,11 @@ body {
   gap: 12px;
 }
 
+.word-entry {
+  display: flex;
+  flex-direction: column;
+}
+
 .word-card {
   display: flex;
   justify-content: space-between;
@@ -536,6 +541,10 @@ body {
 
 .word-card.in-learning {
   border-left: 3px solid var(--accent);
+}
+
+.word-card.is-verb {
+  border-left: 3px solid var(--primary);
 }
 
 .word-main {
@@ -560,10 +569,164 @@ body {
   align-items: center;
 }
 
+.expand-btn {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+}
+
 .empty-state {
   text-align: center;
   padding: 48px;
   color: var(--text-muted);
+}
+
+/* ============================================================================
+   Verb Forms List (Expanded)
+   ============================================================================ */
+.verb-forms-list {
+  margin-left: 20px;
+  padding: 12px 0;
+  border-left: 2px solid var(--border);
+}
+
+.tense-group {
+  margin-bottom: 12px;
+}
+
+.tense-label {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.verb-form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  margin-left: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.verb-form-row:hover {
+  background: var(--bg-hover);
+}
+
+.verb-form-row.in-learning {
+  border-left: 2px solid var(--accent);
+}
+
+.form-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-person {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 70px;
+}
+
+.form-tense {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.form-text {
+  font-weight: 500;
+}
+
+.form-pl {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.form-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ============================================================================
+   Data Management Modal
+   ============================================================================ */
+.data-management-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.data-section {
+  padding: 16px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+}
+
+.data-section h4 {
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+
+.data-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.danger-section {
+  border: 1px solid var(--danger);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.import-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.checkbox-label input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.confirm-clear {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm-text {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 12px;
 }
 
 /* ============================================================================
@@ -970,6 +1133,12 @@ body {
   margin-top: 8px;
 }
 
+.delete-info {
+  color: var(--warning);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
 /* ============================================================================
    Learning View
    ============================================================================ */
@@ -1123,6 +1292,7 @@ body {
 .feedback-hint {
   font-size: 13px;
   color: var(--text-muted);
+  margin-top: 8px;
   margin-bottom: 16px;
 }
 
@@ -1168,7 +1338,7 @@ body {
 @media (max-width: 640px) {
   .app {
     padding: 16px;
-    padding-top: 70px; /* Space for theme toggle */
+    padding-top: 70px;
   }
 
   .header h1 {
@@ -1241,6 +1411,15 @@ body {
     flex-direction: column;
     gap: 8px;
   }
+  
+  .verb-forms-list {
+    margin-left: 8px;
+  }
+  
+  .form-info {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
 
 /* ============================================================================
@@ -1260,11 +1439,4 @@ body {
 
 .question-header .badge {
   margin: 0 4px;
-}
-
-.feedback-hint {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: 8px;
-  margin-bottom: 16px;
 }

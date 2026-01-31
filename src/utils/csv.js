@@ -7,7 +7,7 @@ export const parseCSV = (text) => {
   const header = lines[0].split(',').map(h => h.trim().toLowerCase());
   const wordIdx = header.findIndex(h => h === 'word' || h === 'słowo');
   const classIdx = header.findIndex(h => 
-    h === 'class' || h === 'partofspeech' || h === 'część mowy'
+    h === 'class' || h === 'partofspeech' || h === 'część mowy' || h === 'type'
   );
   
   if (wordIdx === -1) return [];
