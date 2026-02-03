@@ -134,7 +134,7 @@ const DatabaseView = () => {
           in_learning: false,
         });
 
-        // Create verb form entries
+        // Create verb form entries (without word/translation - derived from parent)
         for (const tense of ["present", "past", "future"]) {
           const tenseForms = wordData.forms[tense] || [];
           tenseForms.forEach((formText, idx) => {
@@ -145,8 +145,6 @@ const DatabaseView = () => {
             db.words.add({
               id: db.generateId(),
               verbId,
-              word: wordData.word,
-              translation: wordData.translation,
               type: "verbForm",
               tense,
               person: idx + 1,
@@ -161,19 +159,25 @@ const DatabaseView = () => {
           });
         }
       } else {
-        // Non-verb word
-        await db.words.add({
+        // Non-verb word (article only for nouns)
+        const wordEntry = {
           id: db.generateId(),
           word: wordData.word,
           translation: wordData.translation,
           type: wordData.type,
-          article: wordData.article || null,
           example: examples.example || "",
           example_pl: examples.example_pl || "",
           level: 0,
           streak: 0,
           in_learning: false,
-        });
+        };
+        
+        // Only add article for nouns
+        if (wordData.type === "noun" && wordData.article) {
+          wordEntry.article = wordData.article;
+        }
+        
+        await db.words.add(wordEntry);
       }
 
       await refreshWords();
@@ -235,6 +239,7 @@ const DatabaseView = () => {
             in_learning: false,
           });
 
+          // Create verb form entries (without word/translation)
           for (const tense of ["present", "past", "future"]) {
             const tenseForms = wordData.forms[tense] || [];
             tenseForms.forEach((formText, idx) => {
@@ -245,8 +250,6 @@ const DatabaseView = () => {
               db.words.add({
                 id: db.generateId(),
                 verbId,
-                word: wordData.word,
-                translation: wordData.translation,
                 type: "verbForm",
                 tense,
                 person: idx + 1,
@@ -261,18 +264,24 @@ const DatabaseView = () => {
             });
           }
         } else {
-          await db.words.add({
+          // Non-verb word (article only for nouns)
+          const wordEntry = {
             id: db.generateId(),
             word: wordData.word,
             translation: wordData.translation,
             type: wordData.type,
-            article: wordData.article || null,
             example: examples.example || "",
             example_pl: examples.example_pl || "",
             level: 0,
             streak: 0,
             in_learning: false,
-          });
+          };
+          
+          if (wordData.type === "noun" && wordData.article) {
+            wordEntry.article = wordData.article;
+          }
+          
+          await db.words.add(wordEntry);
         }
 
         return { success: true, word: row.word };
@@ -386,12 +395,17 @@ const DatabaseView = () => {
     }
   };
 
+  // Get parent verb for a form (for display)
+  const getParentVerb = (verbId) => {
+    return words.find(w => w.id === verbId);
+  };
+
   // Render verb form row
-  const renderVerbFormRow = (form) => (
+  const renderVerbFormRow = (form, parentVerb) => (
     <div 
       key={form.id} 
       className={`verb-form-row ${form.in_learning ? 'in-learning' : ''}`}
-      onClick={() => setShowViewModal(form)}
+      onClick={() => setShowViewModal({ ...form, word: parentVerb?.word, translation: parentVerb?.translation })}
     >
       <div className="form-info">
         <span className="form-person">{PERSONS[form.person - 1]}</span>
@@ -536,7 +550,7 @@ const DatabaseView = () => {
                         <div className="tense-label">{TENSE_LABELS[tense]}</div>
                         {tenseForms
                           .sort((a, b) => a.person - b.person)
-                          .map(form => renderVerbFormRow(form))}
+                          .map(form => renderVerbFormRow(form, item))}
                       </div>
                     );
                   })}

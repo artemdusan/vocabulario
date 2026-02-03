@@ -1158,14 +1158,6 @@ body {
 .session-progress {
   font-size: 14px;
   color: var(--text-muted);
-  display: flex;
-  align-items: center;
-}
-
-.wrong-count {
-  color: var(--warning);
-  font-size: 12px;
-  margin-left: 8px;
 }
 
 .learning-content {
@@ -1221,6 +1213,25 @@ body {
   text-align: left;
 }
 
+.intro-timer {
+  margin-top: 24px;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.intro-timer-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  animation: intro-countdown 4s linear forwards;
+}
+
+@keyframes intro-countdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
 /* Question Card */
 .question-card .question-header {
   display: flex;
@@ -1248,28 +1259,110 @@ body {
   margin-bottom: 24px;
 }
 
+/* Streak dots */
+.streak-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.streak-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  transition: all 0.3s ease;
+}
+
+.streak-dot.filled {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+/* Verb options */
 .verb-options {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
 }
 
-.question-card .input-group {
-  margin-bottom: 24px;
+.verb-option-btn {
+  padding: 16px 28px;
+  font-size: 16px;
+  font-weight: 500;
+  font-family: inherit;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.verb-option-btn:hover {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.verb-option-btn:active {
+  transform: translateY(0);
+}
+
+/* Answer input */
+.answer-input {
+  width: 100%;
+  padding: 16px 20px;
+  font-size: 18px;
+  font-family: inherit;
+  text-align: center;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.answer-input:focus {
+  border-color: var(--primary);
+}
+
+.answer-input::placeholder {
+  color: var(--text-muted);
 }
 
 /* Feedback Card */
+.feedback-card {
+  animation: feedback-pop 0.3s ease;
+}
+
+@keyframes feedback-pop {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .feedback-card .feedback-icon {
   font-size: 48px;
   margin-bottom: 16px;
+  font-weight: 700;
 }
 
-.feedback-card .feedback-message {
-  font-size: 20px;
+.feedback-card.correct .feedback-icon {
+  color: var(--success);
+}
+
+.feedback-card.incorrect .feedback-icon {
+  color: var(--danger);
+}
+
+.feedback-card .feedback-answer {
+  font-size: 24px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+  color: var(--text);
 }
 
 .feedback-card.correct {
@@ -1280,20 +1373,16 @@ body {
   border-color: var(--danger);
 }
 
-.correct-answer {
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.correct-answer strong {
+.feedback-complete {
+  font-size: 16px;
   color: var(--success);
+  margin-top: 8px;
 }
 
 .feedback-hint {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   margin-top: 8px;
-  margin-bottom: 16px;
 }
 
 /* Complete Card */
@@ -1412,6 +1501,16 @@ body {
     gap: 8px;
   }
   
+  .verb-option-btn {
+    padding: 14px 20px;
+    font-size: 15px;
+  }
+  
+  .answer-input {
+    font-size: 16px;
+    padding: 14px 16px;
+  }
+  
   .verb-forms-list {
     margin-left: 8px;
   }
@@ -1420,23 +1519,4 @@ body {
     flex-wrap: wrap;
     gap: 8px;
   }
-}
-
-/* ============================================================================
-   Learning - Additional Styles
-   ============================================================================ */
-.loading-options {
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 20px;
-}
-
-.remaining-count {
-  color: var(--warning);
-  font-size: 12px;
-  margin-left: 8px;
-}
-
-.question-header .badge {
-  margin: 0 4px;
 }

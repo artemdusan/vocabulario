@@ -130,17 +130,11 @@ export const db = {
         continue;
       }
       
-      // Ensure the word has a valid ID
-      const wordWithId = {
-        ...word,
-        id: word.id || generateId(),
-      };
-      
-      await db.words.add(wordWithId);
+      await db.words.add({ ...word, id: word.id || generateId() });
       imported++;
     }
     
-    // Optionally import settings (excluding API key for security)
+    // Import settings (excluding API key for security)
     if (data.settings) {
       const { apiKey, ...safeSettings } = data.settings;
       for (const [key, value] of Object.entries(safeSettings)) {

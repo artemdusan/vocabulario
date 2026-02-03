@@ -20,7 +20,7 @@ const DeleteConfirmModal = ({ word, onClose, onConfirm }) => {
         </>
       }
     >
-      <p>Czy na pewno chcesz usunąć słowo <strong>"{word.word}"</strong>?</p>
+      <p>Czy na pewno chcesz usunąć słowo <strong>"{word.word || word.form}"</strong>?</p>
       {isVerb && (
         <p className="delete-info">
           ⚠️ Usunięcie czasownika spowoduje również usunięcie wszystkich jego form odmiany.

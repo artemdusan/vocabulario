@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { db } from "../../services/db";
-import { Button, Input, Card, Badge } from "../ui";
+import { Button, Card, Badge } from "../ui";
 import { TENSE_LABELS, PERSONS } from "../../constants";
 import {
   selectLearningItems,
@@ -20,13 +20,13 @@ const LearningView = () => {
   const [answer, setAnswer] = useState("");
   const [isCorrect, setIsCorrect] = useState(null);
   const [options, setOptions] = useState([]);
-  const [selectedOption, setSelectedOption] = useState(null);
 
   // Session state: track streak and intro shown per item
   const [sessionState, setSessionState] = useState(new Map());
 
   const sessionInitialized = useRef(false);
   const wordsRef = useRef(words);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     wordsRef.current = words;
@@ -36,7 +36,6 @@ const LearningView = () => {
   const generateVerbOptions = useCallback((item) => {
     if (!item || item.type !== "verbForm") return [];
 
-    // Get all verb forms for this verb
     const allForms = wordsRef.current.filter(
       w => w.type === 'verbForm' && w.verbId === item.verbId
     );
@@ -46,7 +45,6 @@ const LearningView = () => {
       .filter(f => f.form !== correctForm)
       .map(f => f.form);
 
-    // Get unique forms
     const uniqueOtherForms = [...new Set(otherForms)];
     const shuffled = uniqueOtherForms.sort(() => Math.random() - 0.5);
     const wrongOptions = shuffled.slice(0, 2);
@@ -106,115 +104,16 @@ const LearningView = () => {
         setOptions([]);
       }
       setAnswer("");
-      setSelectedOption(null);
       setIsCorrect(null);
+      
+      // Focus input after render
+      setTimeout(() => inputRef.current?.focus(), 50);
     },
     [generateVerbOptions]
   );
 
-  // Initialize session
-  useEffect(() => {
-    if (sessionInitialized.current) return;
-    sessionInitialized.current = true;
-
-    const items = selectLearningItems(words, settings.poolSize);
-    setSession(items);
-    setCurrentIndex(0);
-
-    // Initialize session state
-    const initialState = new Map();
-    items.forEach((item) => {
-      initialState.set(getItemId(item), { streak: 0, shownIntro: false });
-    });
-    setSessionState(initialState);
-
-    if (items.length === 0) {
-      setPhase("complete");
-    } else {
-      const firstItem = items[0];
-      if (firstItem.level === 0) {
-        setPhase("intro");
-      } else {
-        setPhase("question");
-        if (firstItem.type === "verbForm") {
-          setTimeout(() => {
-            const opts = generateVerbOptions(firstItem);
-            setOptions(opts);
-          }, 0);
-        }
-      }
-    }
-  }, []);
-
-  const currentItem = session[currentIndex];
-
-  // Mark intro as shown and go to question
-  const handleShowQuestion = () => {
-    if (currentItem) {
-      const itemId = getItemId(currentItem);
-      setSessionState((prev) => {
-        const newState = new Map(prev);
-        const current = newState.get(itemId) || { streak: 0, shownIntro: false };
-        newState.set(itemId, { ...current, shownIntro: true });
-        return newState;
-      });
-    }
-
-    prepareQuestion(currentItem);
-    setPhase("question");
-  };
-
-  const handleSubmitAnswer = async () => {
-    const question = createQuestion(currentItem);
-    const correct =
-      currentItem.type === "verbForm"
-        ? selectedOption === currentItem.form
-        : validateAnswer(answer, question.blank, currentItem);
-
-    setIsCorrect(correct);
-    setPhase("feedback");
-
-    // Update session state
-    const itemId = getItemId(currentItem);
-    let newStreak = 0;
-
-    setSessionState((prev) => {
-      const newState = new Map(prev);
-      const current = newState.get(itemId) || { streak: 0, shownIntro: false };
-
-      if (correct) {
-        newStreak = current.streak + 1;
-      } else {
-        newStreak = 0;
-      }
-
-      newState.set(itemId, { ...current, streak: newStreak });
-      return newState;
-    });
-
-    // Update level in database
-    await updateProgress(currentItem, correct, correct ? newStreak : 0);
-  };
-
-  const updateProgress = async (item, correct, newSessionStreak) => {
-    const currentWords = wordsRef.current;
-    const word = currentWords.find(w => w.id === item.id);
-    
-    if (!word) return;
-
-    const { level, lastLevelChange } = calculateNewLevel(
-      word.level || 0,
-      correct,
-      newSessionStreak,
-      word.lastLevelChange,
-      settings.requiredStreak
-    );
-
-    await db.words.put({ ...word, level, lastLevelChange });
-    await refreshWords();
-  };
-
-  const handleNext = () => {
+  // Move to next item
+  const moveToNext = useCallback(() => {
     const incompleteItems = getIncompleteItems();
 
     if (incompleteItems.length === 0) {
@@ -251,6 +150,131 @@ const LearningView = () => {
       prepareQuestion(nextItem);
       setPhase("question");
     }
+  }, [currentIndex, session, sessionState, settings.requiredStreak, getIncompleteItems, needsIntro, prepareQuestion]);
+
+  // Initialize session
+  useEffect(() => {
+    if (sessionInitialized.current) return;
+    sessionInitialized.current = true;
+
+    const items = selectLearningItems(words, settings.poolSize);
+    setSession(items);
+    setCurrentIndex(0);
+
+    const initialState = new Map();
+    items.forEach((item) => {
+      initialState.set(getItemId(item), { streak: 0, shownIntro: false });
+    });
+    setSessionState(initialState);
+
+    if (items.length === 0) {
+      setPhase("complete");
+    } else {
+      const firstItem = items[0];
+      if (firstItem.level === 0) {
+        setPhase("intro");
+      } else {
+        setPhase("question");
+        if (firstItem.type === "verbForm") {
+          setTimeout(() => {
+            setOptions(generateVerbOptions(firstItem));
+          }, 0);
+        }
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
+    }
+  }, []);
+
+  const currentItem = session[currentIndex];
+
+  // Auto-advance from intro after 4 seconds
+  useEffect(() => {
+    if (phase !== "intro" || !currentItem) return;
+
+    const timer = setTimeout(() => {
+      // Mark intro as shown
+      const itemId = getItemId(currentItem);
+      setSessionState((prev) => {
+        const newState = new Map(prev);
+        const current = newState.get(itemId) || { streak: 0, shownIntro: false };
+        newState.set(itemId, { ...current, shownIntro: true });
+        return newState;
+      });
+
+      prepareQuestion(currentItem);
+      setPhase("question");
+    }, 4000);
+
+    return () => clearTimeout(timer);
+  }, [phase, currentItem, prepareQuestion]);
+
+  // Auto-advance from feedback after delay
+  useEffect(() => {
+    if (phase !== "feedback") return;
+
+    const delay = isCorrect ? 1500 : 2500; // Shorter for correct, longer for wrong
+    const timer = setTimeout(() => {
+      moveToNext();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [phase, isCorrect, moveToNext]);
+
+  const updateProgress = async (item, correct, newSessionStreak) => {
+    const currentWords = wordsRef.current;
+    const word = currentWords.find(w => w.id === item.id);
+    
+    if (!word) return;
+
+    const { level, lastLevelChange } = calculateNewLevel(
+      word.level || 0,
+      correct,
+      newSessionStreak,
+      word.lastLevelChange,
+      settings.requiredStreak
+    );
+
+    await db.words.put({ ...word, level, lastLevelChange });
+    await refreshWords();
+  };
+
+  const handleAnswer = async (selectedAnswer) => {
+    if (phase !== "question") return;
+    
+    const question = createQuestion(currentItem);
+    const correct =
+      currentItem.type === "verbForm"
+        ? selectedAnswer === currentItem.form
+        : validateAnswer(selectedAnswer, question.blank, currentItem);
+
+    setIsCorrect(correct);
+    setPhase("feedback");
+
+    // Update session state
+    const itemId = getItemId(currentItem);
+    let newStreak = 0;
+
+    setSessionState((prev) => {
+      const newState = new Map(prev);
+      const current = newState.get(itemId) || { streak: 0, shownIntro: false };
+
+      if (correct) {
+        newStreak = current.streak + 1;
+      } else {
+        newStreak = 0;
+      }
+
+      newState.set(itemId, { ...current, streak: newStreak });
+      return newState;
+    });
+
+    await updateProgress(currentItem, correct, correct ? newStreak : 0);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && answer.trim()) {
+      handleAnswer(answer.trim());
+    }
   };
 
   // Calculate progress
@@ -262,7 +286,7 @@ const LearningView = () => {
 
   const progress = session.length > 0 ? (completedCount / session.length) * 100 : 0;
 
-  // Render intro card
+  // Render intro card (auto-dismisses after 4s)
   const renderIntro = () => {
     if (!currentItem) return null;
 
@@ -288,7 +312,9 @@ const LearningView = () => {
             <p className="example-pl">{currentItem.example_pl}</p>
           </div>
         )}
-        <Button onClick={handleShowQuestion}>Rozumiem, dalej →</Button>
+        <div className="intro-timer">
+          <div className="intro-timer-bar" />
+        </div>
       </Card>
     );
   };
@@ -307,15 +333,19 @@ const LearningView = () => {
       <Card className="learning-card question-card">
         <div className="question-header">
           <span className="question-polish">{currentItem.word}</span>
-          <Badge>Lv. {currentItem.level || 0}</Badge>
-          <Badge variant={currentStreak > 0 ? "success" : "default"}>
-            {currentStreak}/{settings.requiredStreak} ✓
-          </Badge>
           {isVerbForm && (
             <Badge variant="accent">
               {TENSE_LABELS[currentItem.tense]} • {PERSONS[currentItem.person - 1]}
             </Badge>
           )}
+          <div className="streak-dots">
+            {Array.from({ length: settings.requiredStreak }).map((_, i) => (
+              <span 
+                key={i} 
+                className={`streak-dot ${i < currentStreak ? 'filled' : ''}`}
+              />
+            ))}
+          </div>
         </div>
 
         <p className="question-sentence">{question.sentence}</p>
@@ -323,43 +353,36 @@ const LearningView = () => {
 
         {isVerbForm ? (
           <div className="verb-options">
-            {options.length > 0 ? (
-              options.map((opt, idx) => (
-                <Button
-                  key={idx}
-                  variant={selectedOption === opt ? "accent" : "secondary"}
-                  onClick={() => setSelectedOption(opt)}
-                >
-                  {opt}
-                </Button>
-              ))
-            ) : (
-              <p className="loading-options">Ładowanie opcji...</p>
-            )}
+            {options.map((opt, idx) => (
+              <button
+                key={idx}
+                className="verb-option-btn"
+                onClick={() => handleAnswer(opt)}
+              >
+                {opt}
+              </button>
+            ))}
           </div>
         ) : (
-          <Input
+          <input
+            ref={inputRef}
+            type="text"
+            className="answer-input"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Wpisz odpowiedź..."
-            autoFocus
-            onKeyDown={(e) =>
-              e.key === "Enter" && answer.trim() && handleSubmitAnswer()
-            }
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
           />
         )}
-
-        <Button
-          onClick={handleSubmitAnswer}
-          disabled={isVerbForm ? !selectedOption : !answer.trim()}
-        >
-          Sprawdź
-        </Button>
       </Card>
     );
   };
 
-  // Render feedback
+  // Render feedback (auto-dismisses)
   const renderFeedback = () => {
     if (!currentItem) return null;
 
@@ -370,31 +393,17 @@ const LearningView = () => {
     const isComplete = currentStreak >= settings.requiredStreak;
 
     return (
-      <Card
-        className={`learning-card feedback-card ${isCorrect ? "correct" : "incorrect"}`}
-      >
-        <div className="feedback-icon">{isCorrect ? "✅" : "❌"}</div>
-        <div className="feedback-message">
-          {isCorrect
-            ? isComplete
-              ? "🎉 Słowo zaliczone!"
-              : "Dobrze!"
-            : "Niestety, błędna odpowiedź"}
+      <Card className={`learning-card feedback-card ${isCorrect ? "correct" : "incorrect"}`}>
+        <div className="feedback-icon">{isCorrect ? "✓" : "✗"}</div>
+        <div className="feedback-answer">
+          {question.blank}
         </div>
-        <div className="correct-answer">
-          Poprawna odpowiedź: <strong>{question.blank}</strong>
-        </div>
-        {isCorrect && !isComplete && (
-          <p className="feedback-hint">
-            Jeszcze {settings.requiredStreak - currentStreak} poprawna odpowiedź do zaliczenia.
-          </p>
+        {isCorrect && isComplete && (
+          <div className="feedback-complete">🎉 Zaliczone!</div>
         )}
         {!isCorrect && (
-          <p className="feedback-hint">
-            Streak zresetowany. To słowo pojawi się ponownie.
-          </p>
+          <div className="feedback-hint">Spróbuj ponownie</div>
         )}
-        <Button onClick={handleNext}>Dalej →</Button>
       </Card>
     );
   };
@@ -409,8 +418,6 @@ const LearningView = () => {
     </Card>
   );
 
-  const remainingCount = session.length - completedCount;
-
   return (
     <div className="learning-view">
       <header className="learning-header">
@@ -418,12 +425,7 @@ const LearningView = () => {
           ← Wróć
         </Button>
         <div className="session-progress">
-          <span>
-            {completedCount} / {session.length} zaliczonych
-          </span>
-          {remainingCount > 0 && (
-            <span className="remaining-count">({remainingCount} pozostało)</span>
-          )}
+          {completedCount} / {session.length}
         </div>
       </header>
 
@@ -434,7 +436,7 @@ const LearningView = () => {
       <div className="learning-content">
         {phase === "loading" && (
           <Card className="learning-card">
-            <p>Ładowanie sesji...</p>
+            <p>Ładowanie...</p>
           </Card>
         )}
         {phase === "intro" && renderIntro()}

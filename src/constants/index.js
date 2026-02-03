@@ -1,5 +1,5 @@
 export const DB_NAME = "vocabulary-db";
-export const DB_VERSION = 3; // Bumped for schema change
+export const DB_VERSION = 4; // Clean schema - no redundant fields in verbForm/adjective
 export const STORE_WORDS = "words";
 export const STORE_SETTINGS = "settings";
 

@@ -73,6 +73,29 @@ export const validateAnswer = (input, expected, item) => {
 };
 
 /**
+ * Enrich verbForm with parent verb data (word, translation)
+ */
+export const enrichVerbForm = (verbForm, allWords) => {
+  if (verbForm.type !== "verbForm") return verbForm;
+  
+  const parentVerb = allWords.find(w => w.id === verbForm.verbId);
+  if (!parentVerb) return verbForm;
+  
+  return {
+    ...verbForm,
+    word: parentVerb.word,
+    translation: parentVerb.translation,
+  };
+};
+
+/**
+ * Enrich all verbForms in a list with parent verb data
+ */
+export const enrichVerbForms = (items, allWords) => {
+  return items.map(item => enrichVerbForm(item, allWords));
+};
+
+/**
  * Select items for learning session based on level (lower = higher probability)
  * Now works with flat structure where verbForms are separate entries
  */
@@ -115,7 +138,8 @@ export const selectLearningItems = (words, poolSize) => {
     [selected[i], selected[j]] = [selected[j], selected[i]];
   }
 
-  return selected;
+  // Enrich verbForms with parent verb data
+  return enrichVerbForms(selected, words);
 };
 
 /**
@@ -143,10 +167,11 @@ export const getAvailableByType = (words, type) => {
 };
 
 /**
- * Get verb forms for a specific verb
+ * Get verb forms for a specific verb (enriched with parent data)
  */
 export const getVerbForms = (words, verbId) => {
-  return words.filter(w => w.type === 'verbForm' && w.verbId === verbId);
+  const forms = words.filter(w => w.type === 'verbForm' && w.verbId === verbId);
+  return enrichVerbForms(forms, words);
 };
 
 /**

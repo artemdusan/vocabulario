@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Select } from '../ui';
 import { TENSE_LABELS, PERSONS } from '../../constants';
-import { getDisplayTranslation, getVerbForms } from '../../utils';
+import { getDisplayTranslation, getVerbForms, enrichVerbForm } from '../../utils';
 import { db } from '../../services/db';
 
 const EditWordModal = ({ word, allWords, onClose, onSave, onDelete }) => {
@@ -10,7 +10,11 @@ const EditWordModal = ({ word, allWords, onClose, onSave, onDelete }) => {
   const [formStates, setFormStates] = useState({});
 
   const isVerb = word?.type === 'verb';
+  const isVerbForm = word?.type === 'verbForm';
   const verbForms = isVerb ? getVerbForms(allWords, word?.id) : [];
+  
+  // Enrich verbForm with parent data for display
+  const enrichedWord = isVerbForm ? enrichVerbForm(word, allWords) : word;
 
   useEffect(() => {
     if (word) {
@@ -71,7 +75,7 @@ const EditWordModal = ({ word, allWords, onClose, onSave, onDelete }) => {
     <Modal
       open={!!word}
       onClose={onClose}
-      title={`Edytuj: ${word.word}`}
+      title={`Edytuj: ${enrichedWord.word || word.form}`}
       footer={
         <>
           <Button variant="danger" onClick={() => onDelete(word)}>Usuń</Button>
@@ -83,7 +87,7 @@ const EditWordModal = ({ word, allWords, onClose, onSave, onDelete }) => {
       <div className="edit-word-content">
         <div className="word-info-row">
           <span className="label">Tłumaczenie:</span>
-          <span className="value">{getDisplayTranslation(word)}</span>
+          <span className="value">{getDisplayTranslation(enrichedWord)}</span>
         </div>
 
         {!isVerb && (

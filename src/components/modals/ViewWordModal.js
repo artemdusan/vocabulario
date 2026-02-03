@@ -1,13 +1,16 @@
 import React from 'react';
 import { Modal, Button, Badge } from '../ui';
 import { TYPE_LABELS, TENSE_LABELS, PERSONS } from '../../constants';
-import { getDisplayTranslation, getVerbForms } from '../../utils';
+import { getDisplayTranslation, getVerbForms, enrichVerbForm } from '../../utils';
 
 const ViewWordModal = ({ word, allWords, onClose, onEdit }) => {
   if (!word) return null;
 
   const isVerbForm = word.type === 'verbForm';
   const isVerb = word.type === 'verb';
+  
+  // Enrich verbForm with parent data if needed
+  const enrichedWord = isVerbForm ? enrichVerbForm(word, allWords) : word;
   
   // Get verb forms if this is a verb
   const verbForms = isVerb ? getVerbForms(allWords, word.id) : [];
@@ -21,7 +24,7 @@ const ViewWordModal = ({ word, allWords, onClose, onEdit }) => {
     <Modal
       open={!!word}
       onClose={onClose}
-      title={word.word}
+      title={enrichedWord.word || word.form}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Zamknij</Button>
@@ -32,7 +35,7 @@ const ViewWordModal = ({ word, allWords, onClose, onEdit }) => {
       <div className="view-word-content">
         <div className="word-info-row">
           <span className="label">Tłumaczenie:</span>
-          <span className="value">{getDisplayTranslation(word)}</span>
+          <span className="value">{getDisplayTranslation(enrichedWord)}</span>
         </div>
         <div className="word-info-row">
           <span className="label">Typ:</span>

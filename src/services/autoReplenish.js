@@ -25,7 +25,7 @@ export const autoReplenishLearning = async (words, settings, refreshWords) => {
       });
 
       // Update all verb forms
-      const forms = getVerbForms(words, verb.id);
+      const forms = words.filter(w => w.type === 'verbForm' && w.verbId === verb.id);
       for (const form of forms) {
         await db.words.put({
           ...form,
